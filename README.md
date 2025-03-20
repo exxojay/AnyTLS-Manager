@@ -37,7 +37,6 @@ rm AnyTLS_Manager.sh
 
 ```
 proxies:
-
 - name: anytls
   type: anytls
   server: 1.2.3.4
@@ -50,9 +49,9 @@ proxies:
   min-idle-session: 0
   sni: "example.com"
   alpn:
-  - h2
-  - http/1.1
-    skip-cert-verify: true
+    - h2
+    - http/1.1
+  skip-cert-verify: true
 ```
 
 ### Singbox配置参考示例(自 sing-box 1.12.0 起)
