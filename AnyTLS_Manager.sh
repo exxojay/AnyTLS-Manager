@@ -158,6 +158,34 @@ check_port_in_use() {
     fi
 }
 
+# 配置防火墙规则
+configure_firewall() {
+    if command -v ufw >/dev/null && ufw status | grep -q "active"; then
+        ufw allow "$LISTEN_PORT/tcp" && echo -e "${INFO} $LISTEN_PORT/tcp 外部监听端口已放行"
+    elif command -v firewall-cmd >/dev/null && systemctl is-active --quiet firewalld; then
+        firewall-cmd --add-port="$LISTEN_PORT/tcp" --permanent && firewall-cmd --reload && echo -e "${INFO} $LISTEN_PORT/tcp 外部监听端口已放行"
+    else
+        echo -e "${WARNING} 未检测到启用的防火墙工具（ufw 或 firewalld），请手动配置防火墙以允许端口 $LISTEN_PORT"
+    fi
+}
+
+# 移除防火墙规则
+remove_firewall_rules() {
+    local port=$1
+    if [ -z "$port" ]; then
+        echo -e "${ERROR} 未提供端口号，无法移除防火墙规则"
+        return 1
+    fi
+    if command -v ufw >/dev/null && ufw status | grep -q "active"; then
+        ufw delete allow "$port/tcp" && echo -e "${INFO} 已撤销 ufw 对 $port/tcp 的放行规则"
+    elif command -v firewall-cmd >/dev/null && systemctl is-active --quiet firewalld; then
+        firewall-cmd --remove-port="$port/tcp" --permanent && firewall-cmd --reload && echo -e "${INFO} 已撤销 firewalld 对 $port/tcp 的放行规则"
+    else
+        echo -e "${WARNING} 未检测到启用的防火墙工具，无需移除规则"
+    fi
+    return 0
+}
+
 # 配置监听端口和密码
 configure_anytls() {
     local input_port
@@ -184,6 +212,9 @@ configure_anytls() {
     # 设置默认值
     SNI=$(get_server_ip)  # 默认使用本机 IP 作为 SNI
     INSECURE="1"          # 默认启用不安全连接
+
+    # 配置防火墙
+    configure_firewall
 }
 
 # 保存配置到文件
@@ -255,9 +286,33 @@ restart_service() {
 
 # 获取 VPS 的公网 IP 地址
 get_server_ip() {
-    local ip
-    ip=$(hostname -I | awk '{print $1}')
-    echo "${ip:-无法获取IP}"
+    local ipv4=""
+    local ipv6=""
+
+    if command -v ip >/dev/null 2>&1; then
+        ipv4=$(ip -4 addr show scope global | grep -oP '(?<=inet\s)\d+\.\d+\.\d+\.\d+' | grep -v '^127\.' | head -n 1)
+        ipv6=$(ip -6 addr show scope global | grep -oP '(?<=inet6\s)[0-9a-f:]+' | grep -v '^fe80:' | head -n 1)
+    elif command -v ifconfig >/dev/null 2>&1; then
+        ipv4=$(ifconfig | grep -oP '(?<=inet\s)\d+\.\d+\.\d+\.\d+' | grep -v '^127\.' | head -n 1)
+        ipv6=$(ifconfig | grep -oP '(?<=inet6\s)[0-9a-f:]+' | grep -v '^fe80:' | head -n 1)
+    fi
+
+    if [[ -z "$ipv4" && -z "$ipv6" ]]; then
+        ipv4=$(curl -s -4 ip.sb 2>/dev/null)
+        ipv6=$(curl -s -6 ip.sb 2>/dev/null)
+    fi
+
+    if [[ -n "$ipv4" && -n "$ipv6" ]]; then
+        echo "$ipv4 $ipv6"
+    elif [[ -n "$ipv4" ]]; then
+        echo "$ipv4"
+    elif [[ -n "$ipv6" ]]; then
+        echo "$ipv6"
+    else
+        echo -e "${ERROR} 无法获取服务器 IP"
+        return 1
+    fi
+    return 0
 }
 
 # 查看配置
@@ -271,7 +326,7 @@ view_config() {
         local password=$(grep '^password=' "$CONFIG_FILE" | cut -d'=' -f2)
         local sni=$(grep '^sni=' "$CONFIG_FILE" | cut -d'=' -f2)
         local insecure=$(grep '^insecure=' "$CONFIG_FILE" | cut -d'=' -f2)
-        local server_ip=$(get_server_ip)
+        local server_ip=$(get_server_ip) || return 1
         
         # 构造 AnyTLS URI
         local uri="anytls://${password}@${server_ip}:${listen_port}/?"
@@ -304,6 +359,7 @@ set_config() {
     case "$choice" in
         1)
             configure_port
+            configure_firewall
             ;;
         2)
             configure_password
@@ -363,6 +419,12 @@ uninstall_anytls() {
     if [[ "${confirm,,}" == "y" ]]; then
         systemctl stop anytls
         systemctl disable anytls
+        if [[ -f "$CONFIG_FILE" ]]; then
+            local port=$(grep '^listen_port=' "$CONFIG_FILE" | cut -d'=' -f2)
+            remove_firewall_rules "$port"
+        else
+            echo -e "${WARNING} 无法读取配置文件，跳过防火墙规则撤销"
+        fi
         rm -f "${INSTALL_DIR}/${BINARY_NAME}"
         rm -rf "${CONFIG_DIR}"
         rm -f "${SERVICE_FILE}"
@@ -376,7 +438,6 @@ uninstall_anytls() {
 # 升级 AnyTLS
 upgrade_anytls() {
     local current_version latest_version
-    # 从配置文件读取当前版本
     if [[ -f "$CONFIG_FILE" ]]; then
         current_version=$(grep '^version=' "$CONFIG_FILE" | cut -d'=' -f2)
         current_version=${current_version:-"未知"}
@@ -409,6 +470,51 @@ upgrade_anytls() {
     fi
 }
 
+# 生成 AnyTLS 配置信息（包括 Mihomo 和 Sing-box）
+generate_anytls_config() {
+    local server_ip="$1"
+    local listen_port="$2"
+    local password="$3"
+    local sni="$4"
+
+    echo -e "\n${Yellow_font_prefix}================== 配置信息 ==================${RESET}"
+    echo -e "${Cyan_font_prefix}AnyTLS 配置信息：${RESET}"
+    echo -e "服务器 IP：${server_ip}"
+    echo -e "监听端口：${listen_port}"
+    echo -e "密码：${password}"
+    echo -e "SNI：${sni}"
+    echo -e "版本：${VERSION}"
+
+    echo -e "\n${Yellow_font_prefix}------------------ Mihomo 配置 ------------------${RESET}"
+    echo -e "${Green_font_prefix}proxies:${RESET}"
+    echo -e "  - name: anytls"
+    echo -e "    type: anytls"
+    echo -e "    server: ${server_ip}"
+    echo -e "    port: ${listen_port}"
+    echo -e "    password: \"${password}\""
+    echo -e "    client-fingerprint: chrome"
+    echo -e "    udp: true"
+    echo -e "    sni: \"${sni}\""
+    echo -e "    alpn:"
+    echo -e "      - h2"
+    echo -e "      - http/1.1"
+    echo -e "    skip-cert-verify: true"
+
+    echo -e "\n${Yellow_font_prefix}------------------ Sing-box 配置 ------------------${RESET}"
+    echo -e "${Green_font_prefix}{${RESET}"
+    echo -e "  \"type\": \"anytls\","
+    echo -e "  \"tag\": \"anytls-out\","
+    echo -e "  \"server\": \"${server_ip}\","
+    echo -e "  \"server_port\": ${listen_port},"
+    echo -e "  \"password\": \"${password}\","
+    echo -e "  \"idle_session_check_interval\": \"30s\","
+    echo -e "  \"idle_session_timeout\": \"30s\","
+    echo -e "  \"min_idle_session\": 5,"
+    echo -e "  \"tls\": {},"
+    echo -e "  ... // 拨号字段"
+    echo -e "}"
+}
+
 # 安装 AnyTLS
 install_anytls() {
     install_tools
@@ -417,6 +523,12 @@ install_anytls() {
     save_config      # 保存配置时包含版本号
     create_or_update_service
     start_service
+
+    # 清屏并显示配置信息
+    clear
+    echo -e "${Green_font_prefix}=== AnyTLS 安装完成，以下为配置信息 ===${RESET}"
+    local server_ip=$(get_server_ip) || { echo -e "${ERROR} 获取服务器 IP 失败"; exit 1; }
+    generate_anytls_config "$server_ip" "$LISTEN_PORT" "$PASSWORD" "$SNI"
 }
 
 # 主菜单（与 shadowtls_manager 结构一致）
