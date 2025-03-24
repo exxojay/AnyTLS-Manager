@@ -339,7 +339,7 @@ view_config() {
         local version=$(grep '^version=' "$CONFIG_FILE" | cut -d'=' -f2)
         local server_ips=$(get_server_ip) || { echo -e "${ERROR} 获取服务器 IP 失败"; return 1; }
 
-        # 输出基本配置信息
+        # 输出基本配置信息（仅一次）
         echo -e "${Cyan_font_prefix}AnyTLS 配置信息：${RESET}"
         echo -e "服务器 IP：${server_ips}"
         echo -e "监听地址：${LISTEN_ADDR}:${listen_port}"
@@ -363,6 +363,10 @@ view_config() {
             echo -e "\n${Cyan_font_prefix}AnyTLS URI ($server_ip)：${RESET}"
             echo -e "${Yellow_font_prefix}${uri}${RESET}"
         done
+
+        # 添加 Mihomo 和 Sing-box 配置输出
+        echo -e "\n${Green_font_prefix}=== 以下为 Mihomo 和 Sing-box 配置 ===${RESET}"
+        generate_anytls_config "$server_ips" "$listen_port" "$password" "$sni"
     else
         echo -e "${ERROR} 未找到配置文件，请先安装 AnyTLS"
     fi
@@ -494,7 +498,7 @@ upgrade_anytls() {
     fi
 }
 
-# 生成 AnyTLS 配置信息（包括 Mihomo 和 Sing-box）
+# 生成 AnyTLS 配置信息（仅包括 Mihomo 和 Sing-box）
 generate_anytls_config() {
     local server_ips="$1"
     local listen_port="$2"
@@ -511,12 +515,6 @@ generate_anytls_config() {
         fi
         
         echo -e "\n${Yellow_font_prefix}================== 配置信息 ($ip_type) ==================${RESET}"
-        echo -e "${Cyan_font_prefix}AnyTLS 配置信息 ($ip_type)：${RESET}"
-        echo -e "服务器 IP：${server_ip}"
-        echo -e "监听端口：${listen_port}"
-        echo -e "密码：${password}"
-        echo -e "SNI：${sni}"
-        echo -e "版本：${VERSION}"
 
         echo -e "\n${Yellow_font_prefix}------------------ Mihomo 配置 ($ip_type) ------------------${RESET}"
         echo -e "${Green_font_prefix}proxies:${RESET}"
