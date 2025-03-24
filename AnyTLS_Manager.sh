@@ -188,19 +188,23 @@ remove_firewall_rules() {
 
 # 配置监听端口和密码
 configure_anytls() {
-    local input_port
+    local input_port server_ips ip_array default_port="8443"
+
+    # 配置监听端口
     while true; do
-        read -rp "请输入监听端口 (默认: ${LISTEN_PORT}): " input_port
-        LISTEN_PORT="${input_port:-$LISTEN_PORT}"
-        if ! [[ "$LISTEN_PORT" =~ ^[0-9]+$ ]] || [ "$LISTEN_PORT" -lt 1 ] || [ "$LISTEN_PORT" -gt 65535 ]; then
+        read -rp "请输入监听端口 (默认: ${default_port}): " input_port
+        input_port="${input_port:-$default_port}"  # 如果用户未输入，使用默认值
+        if ! [[ "$input_port" =~ ^[0-9]+$ ]] || [ "$input_port" -lt 1 ] || [ "$input_port" -gt 65535 ]; then
             echo -e "${ERROR} 端口号必须是 1-65535 之间的数字"
-        elif check_port_in_use "$LISTEN_PORT"; then
-            echo -e "${ERROR} 端口 ${LISTEN_PORT} 已被占用，请选择其他端口"
+        elif check_port_in_use "$input_port"; then
+            echo -e "${ERROR} 端口 ${input_port} 已被占用，请选择其他端口"
         else
+            LISTEN_PORT="$input_port"  # 仅在端口有效时更新全局变量
             break
         fi
     done
 
+    # 配置密码
     read -rp "请输入 AnyTLS 密码 (留空则自动生成): " input_password
     if [[ -z "$input_password" ]]; then
         PASSWORD=$(openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | head -c 16)
@@ -209,12 +213,21 @@ configure_anytls() {
         PASSWORD="$input_password"
     fi
 
-    # 设置默认值
-    SNI=$(get_server_ip)  # 默认使用本机 IP 作为 SNI
+    # 设置默认值并优化 SNI
+    server_ips=$(get_server_ip) || { echo -e "${ERROR} 获取服务器 IP 失败"; exit 1; }
+    IFS=' ' read -r -a ip_array <<< "$server_ips"
+    SNI="${ip_array[0]}"  # 默认使用第一个 IP（通常是 IPv4）作为 SNI
     INSECURE="1"          # 默认启用不安全连接
 
     # 配置防火墙
     configure_firewall
+
+    # 提示用户当前配置
+    echo -e "${INFO} 配置完成："
+    echo -e "  监听地址: ${LISTEN_ADDR}:${LISTEN_PORT}"
+    echo -e "  密码: ${PASSWORD}"
+    echo -e "  默认 SNI: ${SNI}"
+    echo -e "  不安全连接: ${INSECURE} (1=启用, 0=禁用)"
 }
 
 # 保存配置到文件
@@ -318,27 +331,38 @@ get_server_ip() {
 # 查看配置
 view_config() {
     if [[ -f "$CONFIG_FILE" ]]; then
-        echo -e "${Cyan_font_prefix}AnyTLS 配置信息：${RESET}"
-        cat "$CONFIG_FILE"
-        
         # 读取配置参数
         local listen_port=$(grep '^listen_port=' "$CONFIG_FILE" | cut -d'=' -f2)
         local password=$(grep '^password=' "$CONFIG_FILE" | cut -d'=' -f2)
         local sni=$(grep '^sni=' "$CONFIG_FILE" | cut -d'=' -f2)
         local insecure=$(grep '^insecure=' "$CONFIG_FILE" | cut -d'=' -f2)
-        local server_ip=$(get_server_ip) || return 1
-        
-        # 构造 AnyTLS URI
-        local uri="anytls://${password}@${server_ip}:${listen_port}/?"
-        if [[ -n "$sni" ]]; then
-            uri="${uri}sni=${sni}"
-            [[ "$insecure" == "1" ]] && uri="${uri}&insecure=1" || uri="${uri}&insecure=0"
-        else
-            uri="${uri}insecure=${insecure}"
-        fi
-        echo -e "\n${Yellow_font_prefix}[提示] SNI 默认设置为本机 IP，insecure 默认启用${RESET}"
-        echo -e "${Cyan_font_prefix}AnyTLS URI：${RESET}"
-        echo -e "${Yellow_font_prefix}${uri}${RESET}"
+        local version=$(grep '^version=' "$CONFIG_FILE" | cut -d'=' -f2)
+        local server_ips=$(get_server_ip) || { echo -e "${ERROR} 获取服务器 IP 失败"; return 1; }
+
+        # 输出基本配置信息
+        echo -e "${Cyan_font_prefix}AnyTLS 配置信息：${RESET}"
+        echo -e "服务器 IP：${server_ips}"
+        echo -e "监听地址：${LISTEN_ADDR}:${listen_port}"
+        echo -e "密码：${password}"
+        echo -e "SNI：${sni}"
+        echo -e "不安全连接：${insecure} (1=启用, 0=禁用)"
+        echo -e "版本：${version}"
+
+        # 为双栈 IP 生成 URI
+        IFS=' ' read -r -a ip_array <<< "$server_ips"
+        for server_ip in "${ip_array[@]}"; do
+            local display_ip="$server_ip"
+            [[ "$server_ip" =~ : ]] && display_ip="[$server_ip]"
+            local uri="anytls://${password}@${display_ip}:${listen_port}/?"
+            if [[ -n "$sni" ]]; then
+                uri="${uri}sni=${sni}"
+                [[ "$insecure" == "1" ]] && uri="${uri}&insecure=1" || uri="${uri}&insecure=0"
+            else
+                uri="${uri}insecure=${insecure}"
+            fi
+            echo -e "\n${Cyan_font_prefix}AnyTLS URI ($server_ip)：${RESET}"
+            echo -e "${Yellow_font_prefix}${uri}${RESET}"
+        done
     else
         echo -e "${ERROR} 未找到配置文件，请先安装 AnyTLS"
     fi
@@ -472,47 +496,60 @@ upgrade_anytls() {
 
 # 生成 AnyTLS 配置信息（包括 Mihomo 和 Sing-box）
 generate_anytls_config() {
-    local server_ip="$1"
+    local server_ips="$1"
     local listen_port="$2"
     local password="$3"
     local sni="$4"
+    IFS=' ' read -r -a ip_array <<< "$server_ips"
+    
+    for server_ip in "${ip_array[@]}"; do
+        local ip_type="IPv4"
+        local display_ip="$server_ip"
+        if [[ "$server_ip" =~ : ]]; then
+            ip_type="IPv6"
+            display_ip="[$server_ip]"
+        fi
+        
+        echo -e "\n${Yellow_font_prefix}================== 配置信息 ($ip_type) ==================${RESET}"
+        echo -e "${Cyan_font_prefix}AnyTLS 配置信息 ($ip_type)：${RESET}"
+        echo -e "服务器 IP：${server_ip}"
+        echo -e "监听端口：${listen_port}"
+        echo -e "密码：${password}"
+        echo -e "SNI：${sni}"
+        echo -e "版本：${VERSION}"
 
-    echo -e "\n${Yellow_font_prefix}================== 配置信息 ==================${RESET}"
-    echo -e "${Cyan_font_prefix}AnyTLS 配置信息：${RESET}"
-    echo -e "服务器 IP：${server_ip}"
-    echo -e "监听端口：${listen_port}"
-    echo -e "密码：${password}"
-    echo -e "SNI：${sni}"
-    echo -e "版本：${VERSION}"
+        echo -e "\n${Yellow_font_prefix}------------------ Mihomo 配置 ($ip_type) ------------------${RESET}"
+        echo -e "${Green_font_prefix}proxies:${RESET}"
+        echo -e "  - name: anytls-$ip_type"
+        echo -e "    type: anytls"
+        echo -e "    server: ${display_ip}"
+        echo -e "    port: ${listen_port}"
+        echo -e "    password: \"${password}\""
+        echo -e "    client-fingerprint: chrome"
+        echo -e "    udp: true"
+        echo -e "    sni: \"${sni}\""
+        echo -e "    alpn:"
+        echo -e "      - h2"
+        echo -e "      - http/1.1"
+        echo -e "    skip-cert-verify: true"
 
-    echo -e "\n${Yellow_font_prefix}------------------ Mihomo 配置 ------------------${RESET}"
-    echo -e "${Green_font_prefix}proxies:${RESET}"
-    echo -e "  - name: anytls"
-    echo -e "    type: anytls"
-    echo -e "    server: ${server_ip}"
-    echo -e "    port: ${listen_port}"
-    echo -e "    password: \"${password}\""
-    echo -e "    client-fingerprint: chrome"
-    echo -e "    udp: true"
-    echo -e "    sni: \"${sni}\""
-    echo -e "    alpn:"
-    echo -e "      - h2"
-    echo -e "      - http/1.1"
-    echo -e "    skip-cert-verify: true"
-
-    echo -e "\n${Yellow_font_prefix}------------------ Sing-box 配置 ------------------${RESET}"
-    echo -e "${Green_font_prefix}{${RESET}"
-    echo -e "  \"type\": \"anytls\","
-    echo -e "  \"tag\": \"anytls-out\","
-    echo -e "  \"server\": \"${server_ip}\","
-    echo -e "  \"server_port\": ${listen_port},"
-    echo -e "  \"password\": \"${password}\","
-    echo -e "  \"idle_session_check_interval\": \"30s\","
-    echo -e "  \"idle_session_timeout\": \"30s\","
-    echo -e "  \"min_idle_session\": 5,"
-    echo -e "  \"tls\": {},"
-    echo -e "  ... // 拨号字段"
-    echo -e "}"
+        echo -e "\n${Yellow_font_prefix}------------------ Sing-box 配置 ($ip_type) ------------------${RESET}"
+        echo -e "${Green_font_prefix}{${RESET}"
+        echo -e "  \"type\": \"anytls\","
+        echo -e "  \"tag\": \"anytls-out-$ip_type\","
+        echo -e "  \"server\": \"${server_ip}\","
+        echo -e "  \"server_port\": ${listen_port},"
+        echo -e "  \"password\": \"${password}\","
+        echo -e "  \"idle_session_check_interval\": \"30s\","
+        echo -e "  \"idle_session_timeout\": \"30s\","
+        echo -e "  \"min_idle_session\": 5,"
+        echo -e "  \"tls\": {"
+        echo -e "    \"enabled\": true,"
+        echo -e "    \"server_name\": \"${sni}\","
+        echo -e "    \"insecure\": true"
+        echo -e "  }"
+        echo -e "}"
+    done
 }
 
 # 安装 AnyTLS
