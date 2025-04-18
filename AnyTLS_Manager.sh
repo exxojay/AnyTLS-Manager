@@ -109,14 +109,14 @@ get_system_architecture() {
     esac
 }
 
-# 获取最新版本号，失败时回退到默认版本 0.0.5，确保不含 v 前缀
+# 获取最新版本号，失败时回退到默认版本 0.0.8，确保不含 v 前缀
 get_latest_version() {
     local version
     version=$(curl -s "https://api.github.com/repos/anytls/anytls-go/releases/latest" | grep -oP '"tag_name": "\K[^"]+')
     version=${version#v}  # 去掉可能的 v 前缀
     if [[ -z "$version" ]]; then
-        echo -e "${WARNING} 无法获取最新版本，使用默认版本 0.0.5"
-        echo "0.0.5"
+        echo -e "${WARNING} 无法获取最新版本，使用默认版本 0.0.8"
+        echo "0.0.8"
     else
         echo "$version"
     fi
