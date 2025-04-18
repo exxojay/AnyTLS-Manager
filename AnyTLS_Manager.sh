@@ -2,13 +2,13 @@
 PATH=$PATH:/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
 export PATH
 
-# Color definitions
+# 颜色定义
 Green_font_prefix="\033[32m" && Red_font_prefix="\033[31m" && Yellow_font_prefix="\033[0;33m" && Cyan_font_prefix="\033[0;36m" && RESET="\033[0m"
 
-# Info prefixes
-INFO="${Green_font_prefix}[Info]${RESET}"
-ERROR="${Red_font_prefix}[Error]${RESET}"
-WARNING="${Yellow_font_prefix}[Warning]${RESET}"
+# 信息前缀
+INFO="${Green_font_prefix}[信息]${RESET}"
+ERROR="${Red_font_prefix}[错误]${RESET}"
+WARNING="${Yellow_font_prefix}[警告]${RESET}"
 
 # Global variables
 INSTALL_DIR="/usr/local/bin"
