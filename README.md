@@ -1,81 +1,81 @@
-# AnyTLS-Manager
+# AnyTLS-Manager  
 
-[![Top Language](https://img.shields.io/github/languages/top/Kismet0123/AnyTLS-Manager.svg)]([https://github.com/Kismet0123/ShadowTLS-Manager](https://github.com/Kismet0123/AnyTLS-Manager))
+[![Top Language](https://img.shields.io/github/languages/top/Kismet0123/AnyTLS-Manager.svg)](https://github.com/Kismet0123/AnyTLS-Manager)  
 
-AnyTLS 管理脚本，支持一键安装、升级和卸载
+An AnyTLS management script supporting one-click installation, upgrade, and uninstallation  
 
->  AnyTLS是一个试图专注于缓解 "TLS in TLS" 问题的 TLS 代理协议（具有灵活的分包和填充策略、连接复用，降低代理延迟、简洁的配置的特点）
+> AnyTLS is a TLS proxy protocol designed to mitigate the "TLS in TLS" issue (featuring flexible packet splitting & padding strategies, connection multiplexing, reduced proxy latency, and concise configuration)  
 
-> [!IMPORTANT]
-> AnyTLS协议较新，目前仅Mihomo和Singbox支持
+> [!IMPORTANT]  
+> The AnyTLS protocol is relatively new and currently only supported by Mihomo and Singbox  
 
----
+---  
 
-## 快速开始📃
+## Quick Start 📃  
 
-**一键部署命令**
+**One-click deployment command**  
 
-```bash
-wget -O AnyTLS_Manager.sh --no-check-certificate https://raw.githubusercontent.com/Kismet0123/AnyTLS-Manager/refs/heads/main/AnyTLS_Manager.sh && chmod +x AnyTLS_Manager.sh && ./AnyTLS_Manager.sh
-```
+```bash  
+wget -O AnyTLS_Manager.sh --no-check-certificate https://raw.githubusercontent.com/Kismet0123/AnyTLS-Manager/refs/heads/main/AnyTLS_Manager.sh && chmod +x AnyTLS_Manager.sh && ./AnyTLS_Manager.sh  
+```  
 
-**查看日志**
+**View logs**  
 
 ```
 journalctl -u anytls
 ```
 
-**删除脚本**
+**Delete script**  
 
 ```
 rm AnyTLS_Manager.sh
 ```
 
-## 客户端配置参考🖥️
+## Client Configuration Reference 🖥️  
 
-### Mihomo 配置参考示例(自mihomo 1.19.3 起)
+### Mihomo Configuration Example (since mihomo 1.19.3)  
 
-```
-proxies:
-- name: anytls
-  type: anytls
-  server: 1.2.3.4
-  port: 443
-  password: "<your password>"
-  client-fingerprint: chrome
-  udp: true
-  idle-session-check-interval: 30
-  idle-session-timeout: 30
-  min-idle-session: 0
-  sni: "example.com"
-  alpn:
-    - h2
-    - http/1.1
-  skip-cert-verify: true
-```
+```yaml
+proxies:  
+- name: anytls  
+  type: anytls  
+  server: 1.2.3.4  
+  port: 443  
+  password: "<your password>"  
+  client-fingerprint: chrome  
+  udp: true  
+  idle-session-check-interval: 30  
+  idle-session-timeout: 30  
+  min-idle-session: 0  
+  sni: "example.com"  
+  alpn:  
+    - h2  
+    - http/1.1  
+  skip-cert-verify: true  
+```  
 
-### Singbox配置参考示例(自 sing-box 1.12.0 起)
+### Singbox Configuration Example (since sing-box 1.12.0)  
 
-```
-{
-  "type": "anytls",
-  "tag": "anytls-out",
-  "server": "127.0.0.1",
-  "server_port": 1080,
-  "password": "8JCsPssfgS8tiRwiMlhARg==",
-  "idle_session_check_interval": "30s",
-  "idle_session_timeout": "30s",
-  "min_idle_session": 5,
-  "tls": {},
+```json
+{  
+  "type": "anytls",  
+  "tag": "anytls-out",  
+  "server": "127.0.0.1",  
+  "server_port": 1080,  
+  "password": "8JCsPssfgS8tiRwiMlhARg==",  
+  "idle_session_check_interval": "30s",  
+  "idle_session_timeout": "30s",  
+  "min_idle_session": 5,  
+  "tls": {},  
 
-  ... // 拨号字段
-}
-```
+  ... // Dial fields  
+}  
+```  
 
-# 参考资料📚
+# References 📚  
 
-## [AnyTLS原仓库](https://github.com/anytls/anytls-go)
+## [AnyTLS Original Repository](https://github.com/anytls/anytls-go)  
 
-## [AnyTLS官方FAQ](https://github.com/anytls/anytls-go/blob/main/docs/faq.md)
+## [AnyTLS Official FAQ](https://github.com/anytls/anytls-go/blob/main/docs/faq.md)  
 
-## [AnyTLS协议说明](https://github.com/anytls/anytls-go/blob/main/docs/protocol.md)
+## [AnyTLS Protocol Documentation](https://github.com/anytls/anytls-go/blob/main/docs/protocol.md)  
