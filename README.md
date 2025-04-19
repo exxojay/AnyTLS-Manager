@@ -16,7 +16,9 @@ An AnyTLS management script supporting one-click installation, upgrade, and unin
 **One-click deployment command**  
 
 ```bash  
-wget -O AnyTLS_Manager.sh --no-check-certificate https://raw.githubusercontent.com/Kismet0123/AnyTLS-Manager/refs/heads/main/AnyTLS_Manager.sh && chmod +x AnyTLS_Manager.sh && ./AnyTLS_Manager.sh  
+#wget -O AnyTLS_Manager.sh --no-check-certificate https://raw.githubusercontent.com/Kismet0123/AnyTLS-Manager/refs/heads/main/AnyTLS_Manager.sh && chmod +x #AnyTLS_Manager.sh && ./AnyTLS_Manager.sh
+
+wget -O AnyTLS_Manager.sh --no-check-certificate https://raw.githubusercontent.com/exxojay/AnyTLS-Manager/refs/heads/main/AnyTLS_Manager.sh && chmod +x AnyTLS_Manager.sh && ./AnyTLS_Manager.sh  
 ```  
 
 **View logs**  
