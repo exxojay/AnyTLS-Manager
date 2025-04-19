@@ -211,7 +211,7 @@ configure_anytls() {
         echo -e "${Cyan_font_prefix}Auto-generated password: ${PASSWORD}${RESET}"
     else
         PASSWORD="$input_password"
-    #done
+    done
 
     # Set defaults and optimize SNI
     server_ips=$(get_server_ip) || { echo -e "${ERROR} Failed to get server IP"; exit 1; }
